@@ -12,6 +12,8 @@ from imutils.video import VideoStream
 import numpy as np
 import argparse
 import imutils
+from yolo import YOLO
+
 def detect_and_predict_mask(frame, faceNet, maskNet):
     # grab the dimensions of the frame and then construct a blob
     # from it
@@ -83,15 +85,47 @@ def main():
     print("[INFO] loading face mask detector model...")
     mask_path = "C:\\Users\\Chieh-Ming Jiang\\Desktop\\VVS_final\\Face-Mask-Detection\\mask_detector.model"
     maskNet = load_model(mask_path)
+    yolo = YOLO("models/cross-hands.cfg", "models/cross-hands.weights", ["hand"])
     drone = tello.Tello('', 8889)  
     time.sleep(5)
     while (True):
         frame = drone.read()
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        # '''
+        # Hands
+        width, height, inference_time, results = yolo.inference(frame)
+        # display fps
+        cv2.putText(frame, f'{round(1/inference_time,2)} FPS', (15,15), cv2.FONT_HERSHEY_SIMPLEX,0.5, (0,255,255), 2)
+        # sort by confidence
+        results.sort(key=lambda x: x[2])
+        # how many hands should be shown
+        hand_count = len(results)
+        if hand_count > 0:
+            print("hands detected!")
+        # display hands
+        for detection in results[:hand_count]:
+            id, name, confidence, x, y, w, h = detection
+            print(id, name)
+            cx = x + (w / 2)
+            cy = y + (h / 2)
+            # draw a bounding box rectangle and label on the image
+            color = (0, 255, 255)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            text = "%s (%s)" % (name, round(confidence, 2))
+            cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, color, 2)
+        # '''
+        '''
+        HOG
         # try: 
         #     frame = HOG.HOG(frame)
         # except:
         #     pass
+        '''
+
+        '''
+        Mask
         frame = imutils.resize(frame, width=400)
         # detect faces in the frame and determine if they are wearing a
         # face mask or not
@@ -124,6 +158,7 @@ def main():
             print("detect mask")
             drone.flip('b')
             time.sleep(5)
+        '''
         key = cv2.waitKey(1)
         if key != -1:
             drone.keyboard(key)
