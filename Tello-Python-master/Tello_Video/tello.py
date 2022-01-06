@@ -2,7 +2,8 @@ import socket
 import threading
 import time
 import numpy as np
-import libh264decoder
+import cv2
+# import libh264decoder
 
 class Tello:
     """Wrapper class to interact with the Tello drone."""
@@ -22,7 +23,7 @@ class Tello:
         """
 
         self.abort_flag = False
-        self.decoder = libh264decoder.H264Decoder()
+        # self.decoder = libh264decoder.H264Decoder()
         self.command_timeout = command_timeout
         self.imperial = imperial
         self.response = None  
@@ -48,7 +49,7 @@ class Tello:
         self.socket.sendto(b'streamon', self.tello_address)
         print ('sent: streamon')
 
-        self.socket_video.bind((local_ip, self.local_video_port))
+        # self.socket_video.bind((local_ip, self.local_video_port))
 
         # thread for receiving video
         self.receive_video_thread = threading.Thread(target=self._receive_video_thread)
@@ -88,26 +89,34 @@ class Tello:
             except socket.error as exc:
                 print ("Caught exception socket.error : %s" % exc)
 
+    # def _receive_video_thread(self):
+    #     """
+    #     Listens for video streaming (raw h264) from the Tello.
+
+    #     Runs as a thread, sets self.frame to the most recent frame Tello captured.
+
+    #     """
+    #     packet_data = ""
+    #     while True:
+    #         try:
+    #             res_string, ip = self.socket_video.recvfrom(2048)
+    #             packet_data += res_string
+    #             # end of frame
+    #             if len(res_string) != 1460:
+    #                 for frame in self._h264_decode(packet_data):
+    #                     self.frame = frame
+    #                 packet_data = ""
+
+    #         except socket.error as exc:
+    #             print ("Caught exception socket.error : %s" % exc)
     def _receive_video_thread(self):
-        """
-        Listens for video streaming (raw h264) from the Tello.
+        video_ip = "udp://{}:{}".format("0.0.0.0", 11111)
+        video_capture = cv2.VideoCapture(video_ip)
+        retval, self.frame = video_capture.read()
+        while retval:
+            retval, frame = video_capture.read()
+            self.frame = frame[..., ::-1] # From BGR to RGB
 
-        Runs as a thread, sets self.frame to the most recent frame Tello captured.
-
-        """
-        packet_data = ""
-        while True:
-            try:
-                res_string, ip = self.socket_video.recvfrom(2048)
-                packet_data += res_string
-                # end of frame
-                if len(res_string) != 1460:
-                    for frame in self._h264_decode(packet_data):
-                        self.frame = frame
-                    packet_data = ""
-
-            except socket.error as exc:
-                print ("Caught exception socket.error : %s" % exc)
     
     def _h264_decode(self, packet_data):
         """
