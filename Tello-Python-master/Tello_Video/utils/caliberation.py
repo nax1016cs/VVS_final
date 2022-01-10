@@ -8,8 +8,8 @@ objpoints = []
 imgpoints = []
 
 # num_pic = 1
-for i in range(0,19):
-    pic = 'img/opencv_frame_' + str(i) + '.jpg'
+for i in range(0,18):
+    pic = '../img/opencv_frame_' + str(i) + '.jpg'
     image = cv2.imread(pic)
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     ret, corners = cv2.findChessboardCorners(gray, size,None)

@@ -2,7 +2,8 @@ import tello
 import sys
 sys.path.insert(1, 'utils/')
 import util
-import HOG
+from HOG import estimate_distance
+from HOG import HOG
 import time
 import cv2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
@@ -12,7 +13,10 @@ from imutils.video import VideoStream
 import numpy as np
 import argparse
 import imutils
+import serial
 from yolo import YOLO
+
+social_dis = 1.5
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
     # grab the dimensions of the frame and then construct a blob
@@ -77,6 +81,9 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
     return (locs, preds)
 
 def main():
+    COM_PORT = 'COM3'
+    BAUD_RATES = 9600
+    ser = serial.Serial(COM_PORT, BAUD_RATES)
     print("[INFO] loading face detector model...")
     prototxtPath = "C:\\Users\\Chieh-Ming Jiang\\Desktop\\VVS_final\\Face-Mask-Detection\\face_detector\\deploy.prototxt"
     weightsPath = "C:\\Users\\Chieh-Ming Jiang\\Desktop\\VVS_final\\Face-Mask-Detection\\face_detector\\res10_300x300_ssd_iter_140000.caffemodel"
@@ -88,24 +95,27 @@ def main():
     yolo = YOLO("models/cross-hands.cfg", "models/cross-hands.weights", ["hand"])
     drone = tello.Tello('', 8889)  
     time.sleep(5)
+    takeoff = False
+    ser.write(b'2\n')
+    ser.write(b'4\n')
     while (True):
+        detectMask = False
+        detectHand = False
+        distance = -1
         frame = drone.read()
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
-        # '''
         # Hands
         width, height, inference_time, results = yolo.inference(frame)
-        # display fps
-        cv2.putText(frame, f'{round(1/inference_time,2)} FPS', (15,15), cv2.FONT_HERSHEY_SIMPLEX,0.5, (0,255,255), 2)
         # sort by confidence
         results.sort(key=lambda x: x[2])
         # how many hands should be shown
         hand_count = len(results)
-        if hand_count > 0:
-            print("hands detected!")
+
         # display hands
         for detection in results[:hand_count]:
             id, name, confidence, x, y, w, h = detection
+            if confidence > 0.6:
+                detectHand = True
             print(id, name)
             cx = x + (w / 2)
             cy = y + (h / 2)
@@ -115,56 +125,59 @@ def main():
             text = "%s (%s)" % (name, round(confidence, 2))
             cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX,
                         0.5, color, 2)
-        # '''
-        '''
-        HOG
-        # try: 
-        #     frame = HOG.HOG(frame)
-        # except:
-        #     pass
-        '''
-
-        '''
-        Mask
-        frame = imutils.resize(frame, width=400)
-        # detect faces in the frame and determine if they are wearing a
-        # face mask or not
+        # Mask
         (locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
 
-        # loop over the detected face locations and their corresponding
-        # locations
-        detectMask = False
         for (box, pred) in zip(locs, preds):
             # unpack the bounding box and predictions
             (startX, startY, endX, endY) = box
+            distance = estimate_distance(startX, startY, endX, endY)
             (mask, withoutMask) = pred
-
-            # determine the class label and color we'll use to draw
-            # the bounding box and text
             label = "Mask" if mask > withoutMask else "No Mask"
             if label == "Mask" :
                 detectMask = True
             color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
-                
-            # include the probability in the label
             label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
-
-            # display the label and bounding box rectangle on the output
-            # frame
             cv2.putText(frame, label, (startX, startY - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
             cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
-        if detectMask:
-            print("detect mask")
-            drone.flip('b')
-            time.sleep(5)
-        '''
+            cv2.putText(frame, str(distance[0]), (10, 30),cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255 , 255), 2)
         key = cv2.waitKey(1)
         if key != -1:
+            if key & 0xFF == ord('1'):
+                takeoff = True
             drone.keyboard(key)
         cv2.imshow("frame",frame) 
         if key & 0xFF == ord('q'):
             break
+        if distance > social_dis and detectHand and detectMask:
+            print("Flipping")
+            drone.flip('r')
+            ser.write(b'2\n')
+            ser.write(b'4\n')
+            time.sleep(3)
+            drone.move_left(0.3)
+        elif distance > social_dis and detectHand and not detectMask:
+            print("no mask greeting!!!")
+            drone.rotate_cw(30)
+            time.sleep(5)
+            drone.rotate_ccw(30)
+            time.sleep(5)
+        elif distance < social_dis and not detectMask and distance > 0:
+            ser.write(b'1\n')
+            ser.write(b'3\n')
+            print("Cannot get in!!!")
+        elif distance < social_dis and detectMask:
+            print("Please get in!!!")
+            ser.write(b'2\n')
+            ser.write(b'4\n')
+            drone.move_right(0.8)
+            time.sleep(3)
+            drone.move_left(0.8)
+            time.sleep(3)
+        else: 
+            ser.write(b'2\n')
+            ser.write(b'4\n')
 
 if __name__ == "__main__":
     main()

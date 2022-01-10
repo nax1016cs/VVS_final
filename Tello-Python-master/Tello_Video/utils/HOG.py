@@ -20,6 +20,18 @@ def HOG(frame):
         imgp[3] = [x+w, y+h]
         cv2.rectangle(frame, tuple(imgp[0]) , tuple(imgp[3]),  (0, 255, 255), 2)
     retval, rvec, tvec = cv2.solvePnP(objp, imgp, cameraMatrix, distCoeffs)
+    print(f'imgpoint: {imgp}')
+    print(f'objp: {objp}')
     if retval:
         cv2.putText(frame, str(tvec[2]) , (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, cv2.LINE_AA )
     return frame
+
+def estimate_distance(x1, y1, x2, y2):
+    cameraMatrix, distCoeffs =  util.camera_matrix("C:\\Users\\Chieh-Ming Jiang\\Desktop\\VVS_final\\Tello-Python-master\\Tello_Video\\utils\\tello.txt")
+    objp, imgp = util.create_points(0.25, 0.2)
+    imgp[0] = [x1, y1]
+    imgp[1] = [x2, y1]
+    imgp[2] = [x1, y2]
+    imgp[3] = [x2, y2]
+    retval, rvec, tvec = cv2.solvePnP(objp, imgp, cameraMatrix, distCoeffs)
+    return tvec[2]
